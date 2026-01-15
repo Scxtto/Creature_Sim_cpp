@@ -29,15 +29,19 @@ jobs:
       - name: Locate QtMsBuild
         shell: pwsh
         run: |
-          $qtRoot = $env:Qt6_DIR
+          $qtRoot = $env:QT_ROOT_DIR
+          if (-not $qtRoot) { $qtRoot = $env:Qt6_DIR }
           if (-not $qtRoot) { $qtRoot = $env:QT_DIR }
-          if (-not $qtRoot) { throw "Qt root not found in env (Qt6_DIR/QT_DIR)." }
+          if (-not $qtRoot) { throw "Qt root not found in env (QT_ROOT_DIR/Qt6_DIR/QT_DIR)." }
+
+          Write-Host "QT root: $qtRoot"
 
           $qtTargets = Get-ChildItem -Path $qtRoot -Recurse -Filter qt.targets -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $qtTargets) { throw "qt.targets not found. Qt VS Tools might not be installed on this runner." }
 
           $qtMsBuild = Split-Path -Parent $qtTargets.FullName
           "QtMsBuild=$qtMsBuild" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
+
 
       - name: Build
         shell: pwsh
