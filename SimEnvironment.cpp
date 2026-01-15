@@ -3,6 +3,7 @@
 
 #include <cmath>
 
+
 Environment::Environment(double respawnBase,
     double respawnMultiplier,
     double energy,
@@ -16,6 +17,7 @@ Environment::Environment(double respawnBase,
     baseReplicationCount = static_cast<int>(std::floor(foodRespawnBase * respawnMultiplier));
 }
 
+
 Environment::~Environment()
 {
     for (auto* creature : creatures) {
@@ -26,15 +28,18 @@ Environment::~Environment()
     }
 }
 
+
 void Environment::addCreature(Creature* creature)
 {
     creatures.push_back(creature);
 }
 
+
 void Environment::addFood(Food* food)
 {
     foods.push_back(food);
 }
+
 
 void Environment::setupFood()
 {

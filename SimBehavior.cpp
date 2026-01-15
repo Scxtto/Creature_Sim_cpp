@@ -8,6 +8,13 @@
 namespace {
 constexpr double kPi = 3.141592653589793;
 
+/**
+ * @brief Distance between a creature and a point.
+ * @param creature Creature to measure from.
+ * @param x Target x coordinate.
+ * @param y Target y coordinate.
+ * @return Euclidean distance.
+ */
 double getDistance(const Creature& creature, double x, double y)
 {
     const double dx = creature.x - x;
@@ -15,6 +22,13 @@ double getDistance(const Creature& creature, double x, double y)
     return std::sqrt(dx * dx + dy * dy);
 }
 
+/**
+ * @brief Calculate desirability score for a food target.
+ * @param creature Creature selecting food.
+ * @param food Food candidate.
+ * @param tracking Per-tick tracking with food competition.
+ * @return Desirability score (higher is better).
+ */
 double calculateFoodDesirability(Creature& creature, Food& food, Tracking& tracking)
 {
     const double distance = getDistance(creature, food.x(), food.y());
@@ -29,6 +43,13 @@ double calculateFoodDesirability(Creature& creature, Food& food, Tracking& track
     return ((energyValue * focus) / distance) * (1.0 / (competition + 1));
 }
 
+/**
+ * @brief Calculate desirability score for a prey target.
+ * @param creature Predator creature.
+ * @param prey Prey candidate.
+ * @param environment Environment containing competitors.
+ * @return Desirability score (higher is better).
+ */
 double calculatePreyDesirability(Creature& creature, Creature& prey, Environment& environment)
 {
     const double distance = getDistance(creature, prey.x, prey.y);
@@ -48,6 +69,13 @@ double calculatePreyDesirability(Creature& creature, Creature& prey, Environment
     return ((energyValue * focus) / distance) * (1.0 / std::pow(competition + 1, 0.2));
 }
 
+/**
+ * @brief Apply movement deltas with bounds and metabolic cost.
+ * @param creature Creature to move.
+ * @param xDelta X delta to apply.
+ * @param yDelta Y delta to apply.
+ * @note Movement is doubled when \c creature.state is "fleeing".
+ */
 void move(Creature& creature, double xDelta, double yDelta)
 {
     if (creature.state == "fleeing") {
@@ -67,6 +95,12 @@ void move(Creature& creature, double xDelta, double yDelta)
     if (creature.y > creature.envHeight) creature.y = creature.envHeight;
 }
 
+/**
+ * @brief Move toward a target position.
+ * @param creature Creature to move.
+ * @param xTarget Target x coordinate.
+ * @param yTarget Target y coordinate.
+ */
 void moveTowards(Creature& creature, double xTarget, double yTarget)
 {
     double xDiff = xTarget - creature.x;
@@ -85,6 +119,12 @@ void moveTowards(Creature& creature, double xTarget, double yTarget)
     move(creature, xDelta, yDelta);
 }
 
+/**
+ * @brief Find closest mate candidate of the same species.
+ * @param creature Creature seeking a mate.
+ * @param environment Environment containing candidates.
+ * @return Closest matching creature or nullptr.
+ */
 Creature* findClosestCreature(Creature& creature, Environment& environment)
 {
     Creature* closestCreature = nullptr;
@@ -105,6 +145,12 @@ Creature* findClosestCreature(Creature& creature, Environment& environment)
     return closestCreature;
 }
 
+/**
+ * @brief Find closest predator in the environment.
+ * @param creature Creature checking for predators.
+ * @param environment Environment containing predators.
+ * @return Closest predator or nullptr.
+ */
 Creature* findClosestPredator(Creature& creature, Environment& environment)
 {
     Creature* closestCreature = nullptr;
@@ -127,6 +173,13 @@ Creature* findClosestPredator(Creature& creature, Environment& environment)
     return closestCreature;
 }
 
+/**
+ * @brief Select the best food or prey target.
+ * @param creature Creature selecting targets.
+ * @param environment Environment containing food and prey.
+ * @param tracking Per-tick tracking with competition data.
+ * @return Target reference describing the best option.
+ */
 TargetRef findBestFood(Creature& creature, Environment& environment, Tracking& tracking)
 {
     TargetRef best;
@@ -186,6 +239,12 @@ TargetRef findBestFood(Creature& creature, Environment& environment, Tracking& t
     return best;
 }
 
+/**
+ * @brief Consume a food item and update creature state.
+ * @param creature Creature consuming food.
+ * @param food Food to consume.
+ * @param environment Environment used to mark food consumed.
+ */
 void consumeFood(Creature& creature, Food& food, Environment& environment)
 {
     creature.fullnessLevel += food.energyContent();
@@ -200,6 +259,11 @@ void consumeFood(Creature& creature, Food& food, Environment& environment)
     creature.recoveryNeeded = 2;
 }
 
+/**
+ * @brief Consume a prey creature and update creature state.
+ * @param creature Predator creature.
+ * @param prey Prey creature.
+ */
 void consumePrey(Creature& creature, Creature& prey)
 {
     creature.fullnessLevel = creature.fullnessLevel + prey.getEnergyContent();
@@ -208,6 +272,13 @@ void consumePrey(Creature& creature, Creature& prey)
     creature.recoveryNeeded = 60;
 }
 
+/**
+ * @brief Mutate a numeric value by a percent factor.
+ * @param value Original value.
+ * @param mutationFactor Probability of mutation.
+ * @param factor Maximum percent change (as fraction).
+ * @return Mutated or original value.
+ */
 double mutateValuePercent(double value, double mutationFactor, double factor)
 {
     if (SimRandom::random01() < mutationFactor) {
@@ -221,6 +292,12 @@ double mutateValuePercent(double value, double mutationFactor, double factor)
     return value;
 }
 
+/**
+ * @brief Mutate litter size when both parents mutate.
+ * @param creature First parent.
+ * @param otherCreature Second parent.
+ * @return Litter size after mutation logic.
+ */
 int mutateBirth(Creature& creature, Creature& otherCreature)
 {
     if (SimRandom::random01() < creature.mutationFactor && SimRandom::random01() < otherCreature.mutationFactor) {
@@ -233,6 +310,12 @@ int mutateBirth(Creature& creature, Creature& otherCreature)
     return static_cast<int>(std::floor((creature.litterSize + otherCreature.litterSize) / 2.0));
 }
 
+/**
+ * @brief Produce a mutated child configuration for reproduction.
+ * @param creature First parent.
+ * @param otherCreature Second parent.
+ * @return Child configuration with mutations applied.
+ */
 CreatureSettings reproduce(Creature& creature, Creature& otherCreature)
 {
     struct Factors {
@@ -309,6 +392,12 @@ CreatureSettings reproduce(Creature& creature, Creature& otherCreature)
     return config;
 }
 
+/**
+ * @brief Update food competition counts for targeting changes.
+ * @param tracking Per-tick tracking accumulator.
+ * @param oldFoodID Previous food id (or -1).
+ * @param newFoodID New food id (or -1).
+ */
 void updateFoodCompetitionMap(Tracking& tracking, int oldFoodID, int newFoodID)
 {
     if (oldFoodID != -1) {
@@ -332,6 +421,12 @@ void updateFoodCompetitionMap(Tracking& tracking, int oldFoodID, int newFoodID)
     }
 }
 
+/**
+ * @brief Attack prey and register predation deaths.
+ * @param creature Predator creature.
+ * @param prey Prey creature.
+ * @param tracking Per-tick tracking accumulator.
+ */
 void attackPrey(Creature& creature, Creature& prey, Tracking& tracking)
 {
     prey.health = prey.health - creature.attackPower;

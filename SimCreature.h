@@ -8,7 +8,11 @@ class Food;
 class Environment;
 struct Tracking;
 
+/**
+ * @brief Lightweight reference to a target food or creature.
+ */
 struct TargetRef {
+    /** @brief Type of target stored by \c TargetRef. */
     enum class Type {
         None,
         Food,
@@ -19,19 +23,72 @@ struct TargetRef {
     Food* food = nullptr;
     class Creature* creature = nullptr;
 
+    /**
+     * @brief Return target id or -1 when unset.
+     * @return Target id when valid, otherwise -1.
+     */
     int id() const;
+    /**
+     * @brief Return target x coordinate or 0 when unset.
+     * @return Target x coordinate.
+     */
     double x() const;
+    /**
+     * @brief Return target y coordinate or 0 when unset.
+     * @return Target y coordinate.
+     */
     double y() const;
 };
 
+/**
+ * @brief Creature entity for the simulation.
+ */
 class Creature {
 public:
+    /**
+     * @brief Create a creature from config at the given position and bounds.
+     * @param id Unique creature id.
+     * @param x Starting x coordinate.
+     * @param y Starting y coordinate.
+     * @param config Creature configuration values.
+     * @param envWidth Environment width.
+     * @param envHeight Environment height.
+     */
     Creature(int id, double x, double y, const CreatureSettings& config, double envWidth, double envHeight);
 
+    /**
+     * @brief Update creature state for one simulation tick.
+     * @param environment Environment owning the creature.
+     * @param tracking Per-tick tracking accumulator.
+     */
     void update(Environment& environment, Tracking& tracking);
+    /**
+     * @brief Distance to a point.
+     * @param x X coordinate.
+     * @param y Y coordinate.
+     * @return Euclidean distance to the point.
+     */
     double getDistance(double x, double y) const;
+    /**
+     * @brief Distance to a target reference.
+     * @param target Target to measure.
+     * @return Euclidean distance to the target.
+     */
     double getDistance(const TargetRef& target) const;
+    /**
+     * @brief Energy content used when consumed as prey.
+     * @return Energy value for predators.
+     */
     double getEnergyContent() const;
+    /**
+     * @brief Spawn a baby creature from config.
+     * @param config New creature configuration.
+     * @param newId Unique id for the baby.
+     * @param x X coordinate for the baby.
+     * @param y Y coordinate for the baby.
+     * @return Newly allocated creature pointer.
+     * @note Ownership transfers to the caller; \c Environment will delete it.
+     */
     Creature* makeBaby(const CreatureSettings& config, int newId, double x, double y);
 
     int id = 0;
