@@ -38,6 +38,7 @@ data/output/
 *.ipch
 *.pdb
 *.ilk
+*.sln
 
 .vscode/
 
@@ -46,3 +47,4 @@ data/output/
 # --------------------------
 Thumbs.db
 .DS_Store
+
