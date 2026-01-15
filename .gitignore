@@ -39,6 +39,8 @@ data/output/
 *.pdb
 *.ilk
 *.sln
+*.vcxproj
+*.vcxproj.*
 
 .vscode/
 
