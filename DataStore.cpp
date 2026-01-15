@@ -163,9 +163,9 @@ static QJsonObject resultToJson(const SimulationResult& result)
 QString DataStore::dataDir()
 {
     QDir dir(QCoreApplication::applicationDirPath());
-    while (dir.dirName() != "cpp_sim" && dir.cdUp()) {
+    while (dir.dirName() != "Creature_Sim_cpp" && dir.cdUp()) {
     }
-    if (dir.dirName() != "cpp_sim") {
+    if (dir.dirName() != "Creature_Sim_cpp") {
         dir = QDir(QCoreApplication::applicationDirPath());
     }
     dir.mkpath("data");
