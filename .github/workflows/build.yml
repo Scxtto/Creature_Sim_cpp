@@ -1,0 +1,49 @@
+name: Build
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  windows-msvc:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+      
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.10.1"
+          host: "windows"
+          target: "desktop"
+          arch: "win64_msvc2022_64"
+          modules: "qtcharts qtmultimedia"
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Locate QtMsBuild
+        shell: pwsh
+        run: |
+          $qtRoot = $env:Qt6_DIR
+          if (-not $qtRoot) { $qtRoot = $env:QT_DIR }
+          if (-not $qtRoot) { throw "Qt root not found in env (Qt6_DIR/QT_DIR)." }
+          $searchRoots = @(
+            $qtRoot,
+            (Join-Path $qtRoot ".."),
+            (Join-Path $qtRoot "..\\.."),
+            (Join-Path $qtRoot "..\\..\\Tools")
+          )
+          $qtTargets = Get-ChildItem -Path $searchRoots -Recurse -Filter qt.targets -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $qtTargets) { throw "qt.targets not found. Ensure Qt VS Tools are installed." }
+          $qtMsBuild = Split-Path -Parent $qtTargets.FullName
+          "QtMsBuild=$qtMsBuild" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
+
+      - name: Build
+        shell: pwsh
+        run: |
+          msbuild .\Creature_Sim_cpp.sln /m /p:Configuration=Release /p:Platform=x64 /p:QtMsBuild="$env:QtMsBuild"
