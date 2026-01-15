@@ -1,4 +1,4 @@
-name: Build
+name: Build (CMake + Qt)
 
 on:
   push:
@@ -6,13 +6,14 @@ on:
   pull_request:
 
 jobs:
-  windows-msvc:
+  build:
     runs-on: windows-2022
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install Qt
-      
         uses: jurplel/install-qt-action@v4
         with:
           version: "6.10.1"
@@ -26,24 +27,20 @@ jobs:
         with:
           arch: x64
 
-      - name: Locate QtMsBuild
+      - name: Configure (CMake)
         shell: pwsh
         run: |
-          $qtRoot = $env:QT_ROOT_DIR
-          if (-not $qtRoot) { $qtRoot = $env:Qt6_DIR }
-          if (-not $qtRoot) { $qtRoot = $env:QT_DIR }
-          if (-not $qtRoot) { throw "Qt root not found in env (QT_ROOT_DIR/Qt6_DIR/QT_DIR)." }
-
-          Write-Host "QT root: $qtRoot"
-
-          $qtTargets = Get-ChildItem -Path $qtRoot -Recurse -Filter qt.targets -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $qtTargets) { throw "qt.targets not found. Qt VS Tools might not be installed on this runner." }
-
-          $qtMsBuild = Split-Path -Parent $qtTargets.FullName
-          "QtMsBuild=$qtMsBuild" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
-
+          cmake -S . -B build `
+            -G "Ninja" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
 
       - name: Build
         shell: pwsh
         run: |
-          msbuild .\Creature_Sim_cpp.sln /m /p:Configuration=Release /p:Platform=x64 /p:QtMsBuild="$env:QtMsBuild"
+          cmake --build build --config Release
+
+      - name: Test
+        shell: pwsh
+        run: |
+          ctest --test-dir build --output-on-failure
