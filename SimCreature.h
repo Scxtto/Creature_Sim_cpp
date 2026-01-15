@@ -106,7 +106,6 @@ public:
     double reserveEnergy = 0.0;
     QString dietType;
     QString dietPreference;
-    QString preferredFoodType;
 
     int reproductionCost = 0;
     int matingHungerThreshold = 0;
@@ -144,3 +143,9 @@ public:
     bool hasLastDirection = false;
     double lastDirection = 0.0;
 };
+
+
+
+
+
+

@@ -15,7 +15,7 @@ constexpr double kPi = 3.141592653589793;
  * @param y Target y coordinate.
  * @return Euclidean distance.
  */
-double getDistance(const Creature& creature, double x, double y)
+double getDistance(const Creature& creature, const double x, const double y)
 {
     const double dx = creature.x - x;
     const double dy = creature.y - y;
@@ -24,57 +24,109 @@ double getDistance(const Creature& creature, double x, double y)
 
 /**
  * @brief Calculate desirability score for a food target.
- * @param creature Creature selecting food.
- * @param food Food candidate.
- * @param tracking Per-tick tracking with food competition.
+ *
+ * The desirability is higher for food that:
+ * - provides more energy,
+ * - is closer to the creature,
+ * - is already being focused/targeted by this creature (focus bonus),
+ * - has fewer competitors targeting it (competition penalty).
+ *
+ * A small epsilon is used when calculating distance to prevent division by zero
+ * when the creature is exactly at the food location.
+ *
+ * @param creature Creature selecting food (read-only).
+ * @param food Food candidate (read-only).
+ * @param tracking Per-tick tracking containing food competition counts (read-only).
  * @return Desirability score (higher is better).
  */
-double calculateFoodDesirability(Creature& creature, Food& food, Tracking& tracking)
+double calculateFoodDesirability(const Creature& creature,
+                                 const Food& food,
+                                 const Tracking& tracking)
 {
-    const double distance = getDistance(creature, food.x(), food.y());
+    const double distance = std::max(1e-9, getDistance(creature, food.x(), food.y()));
     const double energyValue = food.energyContent();
-    const double focus = (creature.targetFood.type == TargetRef::Type::Food && creature.targetFood.food == &food)
-        ? 3.0
-        : 1.0;
-    const int competition = tracking.foodCompetitionMap.count(food.id())
-        ? tracking.foodCompetitionMap[food.id()]
-        : 0;
+
+    const double focus =
+        (creature.targetFood.type == TargetRef::Type::Food &&
+         creature.targetFood.food == &food)
+            ? 3.0
+            : 1.0;
+
+    int competition = 0;
+    if (auto it = tracking.foodCompetitionMap.find(food.id());
+        it != tracking.foodCompetitionMap.end())
+    {
+        competition = it->second;
+    }
 
     return ((energyValue * focus) / distance) * (1.0 / (competition + 1));
 }
 
+
 /**
  * @brief Calculate desirability score for a prey target.
- * @param creature Predator creature.
- * @param prey Prey candidate.
- * @param environment Environment containing competitors.
+ *
+ * The desirability is higher for prey that:
+ * - provides more energy,
+ * - is closer to the predator,
+ * - is already being focused/targeted by this predator (focus bonus),
+ * - has fewer competitors targeting it (competition penalty with soft scaling).
+ *
+ * Competition is determined by counting how many other creatures in the environment
+ * are currently targeting the same prey. The competition penalty uses a fractional
+ * exponent to reduce desirability without making it drop off too sharply.
+ *
+ * A small epsilon is used when calculating distance to prevent division by zero
+ * when the predator is exactly at the prey location.
+ *
+ * @param creature Predator creature selecting prey (read-only).
+ * @param prey Prey candidate (read-only).
+ * @param environment Environment containing competitor creatures (read-only).
  * @return Desirability score (higher is better).
  */
-double calculatePreyDesirability(Creature& creature, Creature& prey, Environment& environment)
+double calculatePreyDesirability(const Creature& creature,
+                                 const Creature& prey,
+                                 const Environment& environment)
 {
-    const double distance = getDistance(creature, prey.x, prey.y);
+    const double distance = std::max(1e-9, getDistance(creature, prey.x, prey.y));
     const double energyValue = prey.getEnergyContent();
-    const double focus = (creature.targetFood.type == TargetRef::Type::Creature && creature.targetFood.creature == &prey)
-        ? 1.5
-        : 1.0;
+
+    const double focus =
+        (creature.targetFood.type == TargetRef::Type::Creature &&
+         creature.targetFood.creature == &prey)
+            ? 1.5
+            : 1.0;
 
     int competition = 0;
-    for (auto* otherCreature : environment.creatures) {
-        if (otherCreature->targetFood.type == TargetRef::Type::Creature &&
-            otherCreature->targetFood.creature == &prey) {
+    for (const auto* otherCreature : environment.creatures) {
+        if (otherCreature &&
+            otherCreature->targetFood.type == TargetRef::Type::Creature &&
+            otherCreature->targetFood.creature == &prey)
+        {
             competition += 1;
         }
     }
 
-    return ((energyValue * focus) / distance) * (1.0 / std::pow(competition + 1, 0.2));
+    return ((energyValue * focus) / distance) *
+           (1.0 / std::pow(static_cast<double>(competition + 1), 0.2));
 }
+
 
 /**
  * @brief Apply movement deltas with bounds and metabolic cost.
- * @param creature Creature to move.
- * @param xDelta X delta to apply.
- * @param yDelta Y delta to apply.
- * @note Movement is doubled when \c creature.state is "fleeing".
+ *
+ * Applies the given movement delta to the creature position. If the creature is
+ * currently fleeing, the movement delta is doubled. Movement drains fullness
+ * according to metabolic parameters. Finally, the creature position is clamped
+ * to the environment bounds.
+ *
+ * @param creature Creature to move (mutated).
+ * @param xDelta Desired X delta to apply.
+ * @param yDelta Desired Y delta to apply.
+ *
+ * @note This function clamps the creature position to [0, envWidth] and
+ *       [0, envHeight].
+ * @note Movement deltas are doubled when @c creature.state is "fleeing".
  */
 void move(Creature& creature, double xDelta, double yDelta)
 {
@@ -86,29 +138,47 @@ void move(Creature& creature, double xDelta, double yDelta)
     creature.x += xDelta;
     creature.y += yDelta;
 
-    creature.fullnessLevel -= std::abs(xDelta) * creature.metabolicBaseRate * creature.metabolicRate;
-    creature.fullnessLevel -= std::abs(yDelta) * creature.metabolicBaseRate * creature.metabolicRate;
+    const double movementCost =
+        (std::abs(xDelta) + std::abs(yDelta)) *
+        creature.metabolicBaseRate *
+        creature.metabolicRate;
 
-    if (creature.x < 0) creature.x = 0;
-    if (creature.x > creature.envWidth) creature.x = creature.envWidth;
-    if (creature.y < 0) creature.y = 0;
-    if (creature.y > creature.envHeight) creature.y = creature.envHeight;
+    creature.fullnessLevel -= movementCost;
+
+    creature.x = std::clamp(creature.x, 0.0, creature.envWidth);
+    creature.y = std::clamp(creature.y, 0.0, creature.envHeight);
 }
 
+
 /**
- * @brief Move toward a target position.
- * @param creature Creature to move.
+ * @brief Move the creature toward a target position.
+ *
+ * Moves the creature toward the given (xTarget, yTarget) position using the
+ * creature's current speed parameters. The resulting movement is clamped to
+ * ensure the creature does not overshoot the target in either axis.
+ *
+ * If the creature is already at the target position, no movement is applied.
+ *
+ * @param creature Creature to move (mutated).
  * @param xTarget Target x coordinate.
  * @param yTarget Target y coordinate.
  */
 void moveTowards(Creature& creature, double xTarget, double yTarget)
 {
-    double xDiff = xTarget - creature.x;
-    double yDiff = yTarget - creature.y;
-    double angle = std::atan2(yDiff, xDiff);
+    const double xDiff = xTarget - creature.x;
+    const double yDiff = yTarget - creature.y;
+
+    // Already at destination.
+    if (xDiff == 0.0 && yDiff == 0.0) {
+        return;
+    }
+
+    const double angle = std::atan2(yDiff, xDiff);
+
     double xDelta = std::cos(angle) * creature.baseSpeed * creature.speedMultiplier;
     double yDelta = std::sin(angle) * creature.baseSpeed * creature.speedMultiplier;
 
+    // Prevent overshooting the target.
     if (std::abs(xDelta) > std::abs(xDiff)) {
         xDelta = xDiff;
     }
@@ -120,20 +190,31 @@ void moveTowards(Creature& creature, double xTarget, double yTarget)
 }
 
 /**
- * @brief Find closest mate candidate of the same species.
- * @param creature Creature seeking a mate.
- * @param environment Environment containing candidates.
- * @return Closest matching creature or nullptr.
+ * @brief Find the closest mate candidate of the same species.
+ *
+ * Searches the environment for the nearest creature that:
+ * - is not the given creature,
+ * - is the same species,
+ * - is currently eligible to reproduce (reproductionCooldown <= 0).
+ *
+ * @param creature Creature seeking a mate (read-only).
+ * @param environment Environment containing creature candidates (read-only).
+ * @return Pointer to the closest valid mate candidate, or nullptr if none found.
  */
-Creature* findClosestCreature(Creature& creature, Environment& environment)
+Creature* findClosestCreature(const Creature& creature, const Environment& environment)
 {
     Creature* closestCreature = nullptr;
     double minDistance = std::numeric_limits<double>::infinity();
 
     for (auto* other : environment.creatures) {
+        if (!other) {
+            continue;
+        }
+
         if (other->id != creature.id &&
             other->speciesName == creature.speciesName &&
-            other->reproductionCooldown <= 0) {
+            other->reproductionCooldown <= 0)
+        {
             const double distance = getDistance(creature, other->x, other->y);
             if (distance < minDistance) {
                 minDistance = distance;
@@ -146,31 +227,47 @@ Creature* findClosestCreature(Creature& creature, Environment& environment)
 }
 
 /**
- * @brief Find closest predator in the environment.
- * @param creature Creature checking for predators.
- * @param environment Environment containing predators.
- * @return Closest predator or nullptr.
+ * @brief Find the closest predator in the environment.
+ *
+ * Searches the environment for the nearest creature that:
+ * - is not the given creature,
+ * - is of a different species,
+ * - is not a herbivore (i.e. treated as a predator/threat).
+ *
+ * If the environment indicates there are no predators (@c environment.hasPredators),
+ * the function returns nullptr immediately.
+ *
+ * @param creature Creature checking for predators (read-only).
+ * @param environment Environment containing other creatures (read-only).
+ * @return Pointer to the closest predator creature, or nullptr if none found.
  */
-Creature* findClosestPredator(Creature& creature, Environment& environment)
+Creature* findClosestPredator(const Creature& creature, const Environment& environment)
 {
-    Creature* closestCreature = nullptr;
+    Creature* closestPredator = nullptr;
     double minDistance = std::numeric_limits<double>::infinity();
 
-    if (environment.hasPredators) {
-        for (auto* other : environment.creatures) {
-            if (other->id != creature.id &&
-                other->speciesName != creature.speciesName &&
-                other->dietType != "herbivore") {
-                const double distance = getDistance(creature, other->x, other->y);
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    closestCreature = other;
-                }
-            }
+    if (!environment.hasPredators) {
+        return nullptr;
+    }
+
+    for (auto* other : environment.creatures) {
+        if (!other) {     
+            continue;
+        }
+
+        if (other->id == creature.id || other->speciesName == creature.speciesName || other->dietType == "herbivore") {
+            continue;
+        }
+
+        const double distance = getDistance(creature, other->x, other->y);
+
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestPredator = other;
         }
     }
 
-    return closestCreature;
+    return closestPredator;
 }
 
 /**
@@ -207,7 +304,7 @@ TargetRef findBestFood(Creature& creature, Environment& environment, Tracking& t
                 continue;
             }
             double desirability = calculateFoodDesirability(creature, *food, tracking);
-            if (creature.dietType == "omnivore" && creature.preferredFoodType == "Plants") {
+            if (creature.dietType == "omnivore" && creature.dietPreference == "Plants") {
                 desirability *= 2.0;
             }
             if (desirability > highestDesirability) {
@@ -223,7 +320,7 @@ TargetRef findBestFood(Creature& creature, Environment& environment, Tracking& t
         for (auto* potentialPrey : environment.creatures) {
             if (potentialPrey->speciesName != creature.speciesName && potentialPrey->health > 0) {
                 double desirability = calculatePreyDesirability(creature, *potentialPrey, environment);
-                if (creature.dietType == "omnivore" && creature.preferredFoodType == "Meat") {
+                if (creature.dietType == "omnivore" && creature.dietPreference == "Meat") {
                     desirability *= 2.0;
                 }
                 if (desirability > highestDesirability) {
@@ -298,14 +395,14 @@ double mutateValuePercent(double value, double mutationFactor, double factor)
  * @param otherCreature Second parent.
  * @return Litter size after mutation logic.
  */
-int mutateBirth(Creature& creature, Creature& otherCreature)
+int mutateBirth(const Creature& creature, const Creature& otherCreature)
 {
     if (SimRandom::urand() < creature.mutationFactor && SimRandom::urand() < otherCreature.mutationFactor) {
         double newLitter = std::round((creature.litterSize + otherCreature.litterSize) / 2.0 + SimRandom::urand() * 2 - 1);
         if (newLitter < 1) {
             return 1;
         }
-        return static_cast<int>(std::round(newLitter));
+        return static_cast<int>(newLitter);
     }
     return static_cast<int>(std::floor((creature.litterSize + otherCreature.litterSize) / 2.0));
 }
@@ -316,7 +413,7 @@ int mutateBirth(Creature& creature, Creature& otherCreature)
  * @param otherCreature Second parent.
  * @return Child configuration with mutations applied.
  */
-CreatureSettings reproduce(Creature& creature, Creature& otherCreature)
+CreatureSettings reproduce(const Creature& creature, const Creature& otherCreature)
 {
     struct Factors {
         double baseSpeed = 0.1;
@@ -355,10 +452,12 @@ CreatureSettings reproduce(Creature& creature, Creature& otherCreature)
     config.initialFullness = static_cast<int>(std::floor(
         (mutateValuePercent(creature.fullnessCap / 2.0, creature.mutationFactor, factors.fullnessCap)
             + mutateValuePercent(otherCreature.fullnessCap / 2.0, otherCreature.mutationFactor, factors.fullnessCap)) / 2.0));
-    config.metabolicBaseRate = (mutateValuePercent(creature.metabolicBaseRate, creature.mutationFactor, factors.metabolicRate)
-        + mutateValuePercent(otherCreature.metabolicBaseRate, otherCreature.mutationFactor, factors.metabolicRate)) / 2.0;
-    config.metabolicRate = (mutateValuePercent(creature.metabolicRate, creature.mutationFactor, factors.metabolicBaseRate)
-        + mutateValuePercent(otherCreature.metabolicRate, otherCreature.mutationFactor, factors.metabolicBaseRate)) / 2.0;
+    
+    config.metabolicBaseRate = (mutateValuePercent(creature.metabolicBaseRate, creature.mutationFactor, factors.metabolicBaseRate)
+        + mutateValuePercent(otherCreature.metabolicBaseRate, otherCreature.mutationFactor, factors.metabolicBaseRate)) / 2.0;
+    config.metabolicRate = (mutateValuePercent(creature.metabolicRate, creature.mutationFactor, factors.metabolicRate)
+        + mutateValuePercent(otherCreature.metabolicRate, otherCreature.mutationFactor, factors.metabolicRate)) / 2.0;
+    
     config.energyStorageRate = (mutateValuePercent(creature.energyStorageRate, creature.mutationFactor, factors.energyStorageRate)
         + mutateValuePercent(otherCreature.energyStorageRate, otherCreature.mutationFactor, factors.energyStorageRate)) / 2.0;
     config.reserveEnergy = 0.0;
@@ -609,6 +708,8 @@ void goHunt(Creature& creature, Environment& environment, Tracking& tracking)
 
 void goFlee(Creature& creature)
 {
+    if (!creature.predator) { creature.state = ""; return; }
+
     const double angle = std::atan2(creature.y - creature.predator->y, creature.x - creature.predator->x);
     const double xDelta = std::cos(angle) * creature.baseSpeed * creature.speedMultiplier;
     const double yDelta = std::sin(angle) * creature.baseSpeed * creature.speedMultiplier;
@@ -645,3 +746,4 @@ void goExplore(Creature& creature)
     }
 }
 }
+
