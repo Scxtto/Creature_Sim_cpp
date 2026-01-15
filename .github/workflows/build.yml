@@ -32,14 +32,10 @@ jobs:
           $qtRoot = $env:Qt6_DIR
           if (-not $qtRoot) { $qtRoot = $env:QT_DIR }
           if (-not $qtRoot) { throw "Qt root not found in env (Qt6_DIR/QT_DIR)." }
-          $searchRoots = @(
-            $qtRoot,
-            (Join-Path $qtRoot ".."),
-            (Join-Path $qtRoot "..\\.."),
-            (Join-Path $qtRoot "..\\..\\Tools")
-          )
-          $qtTargets = Get-ChildItem -Path $searchRoots -Recurse -Filter qt.targets -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $qtTargets) { throw "qt.targets not found. Ensure Qt VS Tools are installed." }
+
+          $qtTargets = Get-ChildItem -Path $qtRoot -Recurse -Filter qt.targets -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $qtTargets) { throw "qt.targets not found. Qt VS Tools might not be installed on this runner." }
+
           $qtMsBuild = Split-Path -Parent $qtTargets.FullName
           "QtMsBuild=$qtMsBuild" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
 
