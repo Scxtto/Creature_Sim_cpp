@@ -1,4 +1,4 @@
-name: Build (CMake + Qt)
+name: Build
 
 on:
   push:
@@ -6,13 +6,24 @@ on:
   pull_request:
 
 jobs:
-  build:
+  windows:
     runs-on: windows-2022
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
+      # --------------------------
+      # Cache Qt installation
+      # --------------------------
+      - name: Cache Qt
+        uses: actions/cache@v4
+        with:
+          path: Qt
+          key: ${{ runner.os }}-qt-6.10.1-msvc2022-qtcharts-qtmultimedia
+
+      # --------------------------
+      # Install Qt (uses cache)
+      # --------------------------
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -21,12 +32,16 @@ jobs:
           target: "desktop"
           arch: "win64_msvc2022_64"
           modules: "qtcharts qtmultimedia"
+          dir: ${{ github.workspace }}/Qt
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
+      # --------------------------
+      # Configure + Build + Test
+      # --------------------------
       - name: Configure (CMake)
         shell: pwsh
         run: |
