@@ -80,7 +80,15 @@ jobs:
       - name: Generate Doxygen docs
         shell: pwsh
         run: |
-          doxygen Doxyfile
+          $doxygen = (Get-Command doxygen.exe -ErrorAction SilentlyContinue).Source
+          if (-not $doxygen) {
+            $doxygen = "C:\Program Files\doxygen\bin\doxygen.exe"
+          }
+          if (-not (Test-Path $doxygen)) {
+            throw "Doxygen executable not found."
+          }
+          & $doxygen -v
+          & $doxygen Doxyfile
 
       # --------------------------
       # Publish to GitHub Pages
