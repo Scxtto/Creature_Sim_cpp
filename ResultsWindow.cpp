@@ -6,10 +6,12 @@
 #include <QGridLayout>
 #include <QPushButton>
 #include <QLabel>
+#include <QButtonGroup>
 #include <QMediaPlayer>
 #include <QVideoWidget>
 #include <QAudioOutput>
 #include <QUrl>
+#include <QTimer>
 
 #include <QtCharts/QChartView>
 #include <QtCharts/QChart>
@@ -41,11 +43,68 @@ ResultsWindow::ResultsWindow(QWidget* parent)
     audioOutput = new QAudioOutput(this);
     player->setAudioOutput(audioOutput);
     player->setVideoOutput(videoWidget);
+    connect(player, &QMediaPlayer::mediaStatusChanged, this, &ResultsWindow::onMediaStatusChanged);
 
     playBtn = new QPushButton("Play");
     connect(playBtn, &QPushButton::clicked, this, &ResultsWindow::onTogglePlayback);
+    playBtn->setEnabled(false);
     videoBox->addWidget(videoWidget, 1);
-    videoBox->addWidget(playBtn);
+
+    auto* controlsRow = new QHBoxLayout();
+    controlsRow->setSpacing(10);
+    controlsRow->addWidget(playBtn);
+
+    fpsButtonGroup = new QButtonGroup(this);
+    fpsButtonGroup->setExclusive(true);
+
+    const char* fpsStyle = R"(
+        QPushButton {
+            background: #d8d8d8;
+            color: #555555;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-weight: 600;
+        }
+        QPushButton:checked {
+            background: #0078ff;
+            color: white;
+        }
+        QPushButton:disabled {
+            background: #e6e6e6;
+            color: #9a9a9a;
+        }
+    )";
+
+    auto makeFpsButton = [this, fpsStyle](const QString& label, int fps) {
+        auto* button = new QPushButton(label);
+        button->setCheckable(true);
+        button->setStyleSheet(fpsStyle);
+        fpsButtonGroup->addButton(button, fps);
+        return button;
+    };
+
+    fps30Btn = makeFpsButton("30", 30);
+    fps60Btn = makeFpsButton("60", 60);
+    fps120Btn = makeFpsButton("120", 120);
+    fps240Btn = makeFpsButton("240", 240);
+    setFpsControlsEnabled(false);
+
+    auto* fpsRow = new QHBoxLayout();
+    fpsRow->setSpacing(6);
+    fpsRow->addWidget(new QLabel("FPS"));
+    fpsRow->addWidget(fps30Btn);
+    fpsRow->addWidget(fps60Btn);
+    fpsRow->addWidget(fps120Btn);
+    fpsRow->addWidget(fps240Btn);
+
+    controlsRow->addStretch();
+    controlsRow->addLayout(fpsRow);
+    videoBox->addLayout(controlsRow);
+
+    connect(fpsButtonGroup, &QButtonGroup::idClicked, this, [this](int fps) {
+        applyPlaybackFps(fps);
+    });
     root->addLayout(videoBox, 2);
 
     chartsContainer = new QWidget();
@@ -59,14 +118,30 @@ ResultsWindow::ResultsWindow(QWidget* parent)
 void ResultsWindow::setResult(const SimulationResult& result)
 {
     statusLabel->setText(QString("Status: %1").arg(result.status));
+    playBtn->setText("Play");
+    playBtn->setEnabled(false);
+    player->stop();
+    setFpsControlsEnabled(false);
+    if (fps30Btn) {
+        fps30Btn->setChecked(true);
+        applyPlaybackFps(30);
+    }
+
+    pendingResult = result;
+    hasPendingResult = true;
+    chartsBuilt = false;
 
     if (!result.videoFile.isEmpty()) {
         player->setSource(QUrl::fromLocalFile(result.videoFile));
+        statusLabel->setText(QString("Status: %1 (loading video)").arg(result.status));
     }
 
     QString error;
     DataStore::saveResult(result, &error);
-    buildCharts(result);
+    if (result.videoFile.isEmpty()) {
+        buildCharts(result);
+        chartsBuilt = true;
+    }
 }
 
 void ResultsWindow::buildCharts(const SimulationResult& result)
@@ -164,6 +239,62 @@ void ResultsWindow::buildCharts(const SimulationResult& result)
     auto* pieView = new QChartView(pieChart);
     pieView->setRenderHint(QPainter::Antialiasing);
     grid->addWidget(pieView, 2, 1);
+}
+
+void ResultsWindow::applyPlaybackFps(int fps)
+{
+    constexpr double baseFps = 30.0;
+    const double rate = static_cast<double>(fps) / baseFps;
+    player->setPlaybackRate(rate);
+}
+
+void ResultsWindow::setFpsControlsEnabled(bool enabled)
+{
+    if (fps30Btn) {
+        fps30Btn->setEnabled(enabled);
+    }
+    if (fps60Btn) {
+        fps60Btn->setEnabled(enabled);
+    }
+    if (fps120Btn) {
+        fps120Btn->setEnabled(enabled);
+    }
+    if (fps240Btn) {
+        fps240Btn->setEnabled(enabled);
+    }
+}
+
+void ResultsWindow::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
+{
+    if (!hasPendingResult) {
+        return;
+    }
+
+    if (status == QMediaPlayer::LoadedMedia || status == QMediaPlayer::BufferedMedia) {
+        playBtn->setEnabled(true);
+        setFpsControlsEnabled(true);
+        statusLabel->setText(QString("Status: %1").arg(pendingResult.status));
+        if (!chartsBuilt) {
+            chartsBuilt = true;
+            QTimer::singleShot(0, this, [this]() { buildCharts(pendingResult); });
+        }
+        return;
+    }
+
+    if (status == QMediaPlayer::InvalidMedia) {
+        playBtn->setEnabled(false);
+        setFpsControlsEnabled(false);
+        statusLabel->setText(QString("Status: %1 (video load failed)").arg(pendingResult.status));
+        if (!chartsBuilt) {
+            chartsBuilt = true;
+            buildCharts(pendingResult);
+        }
+        return;
+    }
+
+    if (status == QMediaPlayer::LoadingMedia) {
+        statusLabel->setText(QString("Status: %1 (loading video)").arg(pendingResult.status));
+    }
 }
 
 void ResultsWindow::onBack()
