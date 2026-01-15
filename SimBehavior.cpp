@@ -281,8 +281,8 @@ void consumePrey(Creature& creature, Creature& prey)
  */
 double mutateValuePercent(double value, double mutationFactor, double factor)
 {
-    if (SimRandom::random01() < mutationFactor) {
-        const double mutation = SimRandom::random01() * (factor * 2) - factor;
+    if (SimRandom::urand() < mutationFactor) {
+        const double mutation = SimRandom::urand() * (factor * 2) - factor;
         double newValue = value + value * mutation;
         if (newValue <= 0) {
             return value;
@@ -300,8 +300,8 @@ double mutateValuePercent(double value, double mutationFactor, double factor)
  */
 int mutateBirth(Creature& creature, Creature& otherCreature)
 {
-    if (SimRandom::random01() < creature.mutationFactor && SimRandom::random01() < otherCreature.mutationFactor) {
-        double newLitter = std::round((creature.litterSize + otherCreature.litterSize) / 2.0 + SimRandom::random01() * 2 - 1);
+    if (SimRandom::urand() < creature.mutationFactor && SimRandom::urand() < otherCreature.mutationFactor) {
+        double newLitter = std::round((creature.litterSize + otherCreature.litterSize) / 2.0 + SimRandom::urand() * 2 - 1);
         if (newLitter < 1) {
             return 1;
         }
@@ -363,7 +363,7 @@ CreatureSettings reproduce(Creature& creature, Creature& otherCreature)
         + mutateValuePercent(otherCreature.energyStorageRate, otherCreature.mutationFactor, factors.energyStorageRate)) / 2.0;
     config.reserveEnergy = 0.0;
     config.dietType = creature.dietType == otherCreature.dietType ? creature.dietType : "omnivore";
-    config.dietPreference = (SimRandom::random01() > 0.5) ? creature.dietPreference : otherCreature.dietPreference;
+    config.dietPreference = (SimRandom::urand() > 0.5) ? creature.dietPreference : otherCreature.dietPreference;
     config.reproductionCost = static_cast<int>((mutateValuePercent(creature.reproductionCost, creature.mutationFactor, factors.reproductionCost)
         + mutateValuePercent(otherCreature.reproductionCost, otherCreature.mutationFactor, factors.reproductionCost)) / 2.0);
     config.matingHungerThreshold = static_cast<int>((mutateValuePercent(creature.matingHungerThreshold, creature.mutationFactor, factors.matingHungerThreshold)
@@ -479,7 +479,7 @@ static void checkAge(Creature& creature)
     if (creature.age >= creature.ageCap) {
         const double ageExcess = creature.age - creature.ageCap;
         const double deathProbability = std::min(1.0, ageExcess * 0.1);
-        if (SimRandom::random01() < deathProbability) {
+        if (SimRandom::urand() < deathProbability) {
             creature.dead = true;
             creature.deathCause = "age";
         }
@@ -600,7 +600,7 @@ void goHunt(Creature& creature, Environment& environment, Tracking& tracking)
             }
         }
     } else {
-        const double angle = SimRandom::random01() * 2.0 * kPi;
+        const double angle = SimRandom::urand() * 2.0 * kPi;
         const double xDelta = std::cos(angle) * creature.baseSpeed * creature.speedMultiplier;
         const double yDelta = std::sin(angle) * creature.baseSpeed * creature.speedMultiplier;
         move(creature, xDelta, yDelta);
@@ -629,14 +629,14 @@ void goExplore(Creature& creature)
 {
     const double maxTurnAngle = (18.0 * kPi) / 180.0;
     if (creature.hasLastDirection) {
-        const double angleChange = SimRandom::random01() * 2 * maxTurnAngle - maxTurnAngle;
+        const double angleChange = SimRandom::urand() * 2 * maxTurnAngle - maxTurnAngle;
         const double angle = creature.lastDirection + angleChange;
         creature.lastDirection = angle;
         const double xDelta = std::cos(angle) * creature.baseSpeed * creature.speedMultiplier;
         const double yDelta = std::sin(angle) * creature.baseSpeed * creature.speedMultiplier;
         move(creature, xDelta, yDelta);
     } else {
-        const double angle = SimRandom::random01() * 2 * kPi;
+        const double angle = SimRandom::urand() * 2 * kPi;
         creature.lastDirection = angle;
         creature.hasLastDirection = true;
         const double xDelta = std::cos(angle) * creature.baseSpeed * creature.speedMultiplier;

@@ -44,8 +44,8 @@ void Environment::addFood(Food* food)
 void Environment::setupFood()
 {
     for (int i = 0; i < baseReplicationCount; i++) {
-        int x = static_cast<int>(std::floor(SimRandom::random01() * width));
-        int y = static_cast<int>(std::floor(SimRandom::random01() * height));
+        int x = static_cast<int>(std::floor(SimRandom::urand() * width));
+        int y = static_cast<int>(std::floor(SimRandom::urand() * height));
         addFood(new Food(foodID++, x, y, foodEnergy));
     }
 }
@@ -56,8 +56,8 @@ void Environment::setupCreatures(const QVector<CreatureSettings>& creaturesConfi
         for (int i = 0; i < creatureConfig.initialPopulation; i++) {
             addCreature(new Creature(
                 creatureID++,
-                std::floor(SimRandom::random01() * width),
-                std::floor(SimRandom::random01() * height),
+                std::floor(SimRandom::urand() * width),
+                std::floor(SimRandom::urand() * height),
                 creatureConfig,
                 width,
                 height));
@@ -70,10 +70,10 @@ void Environment::setupCreatures(const QVector<CreatureSettings>& creaturesConfi
 
 void Environment::replenishFood()
 {
-    if (SimRandom::random01() > 0.5) {
+    if (SimRandom::urand() > 0.5) {
         for (int i = 0; i < baseReplicationCount; i++) {
-            int x = static_cast<int>(std::round(SimRandom::random01() * width));
-            int y = static_cast<int>(std::round(SimRandom::random01() * height));
+            int x = static_cast<int>(std::round(SimRandom::urand() * width));
+            int y = static_cast<int>(std::round(SimRandom::urand() * height));
             addFood(new Food(foodID++, x, y, foodEnergy));
         }
     }

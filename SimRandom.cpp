@@ -1,19 +1,10 @@
 #include "SimRandom.h"
+#include <random>
 
-static std::mt19937& rng()
-{
-    static std::mt19937 engine(std::random_device{}());
-    return engine;
-}
+static thread_local std::mt19937 rng{std::random_device{}()};
 
-double SimRandom::random01()
-{
-    static std::uniform_real_distribution<double> dist(0.0, 1.0);
-    return dist(rng());
-}
-
-int SimRandom::randomInt(int minValue, int maxValue)
-{
-    std::uniform_int_distribution<int> dist(minValue, maxValue);
-    return dist(rng());
+double SimRandom::urand()
+{    
+    static thread_local std::uniform_real_distribution<double> dist(0.0, 1.0);
+    return dist(rng);
 }
